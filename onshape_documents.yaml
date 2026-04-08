@@ -1,0 +1,39 @@
+# OnShape Document Registry
+# Maps project codes to their OnShape document/assembly IDs.
+# Used by scripts and the MCP server to look up OnShape URLs by project code.
+#
+# To add a new document:
+#   1. Open the OnShape assembly in your browser
+#   2. Copy the URL: https://cad.onshape.com/documents/{did}/w/{wid}/e/{eid}
+#   3. Add an entry below with the project code as key
+#
+# URL format: https://cad.onshape.com/documents/{document_id}/w/{workspace_id}/e/{element_id}
+
+documents:
+
+  EH-0080-BB1:
+    name: "EH-0080 BB-1 Baseline Build"
+    description: "Tunable energy harvester — baseline build concept"
+    document_id: "c705694c548ad1e1a3837a92"
+    workspace_id: "d8f69209bc4c52c8d25a4faf"
+    element_id: "877dd04a8541e6360716d72d"
+    url: "https://cad.onshape.com/documents/c705694c548ad1e1a3837a92/w/d8f69209bc4c52c8d25a4faf/e/877dd04a8541e6360716d72d"
+    # Explicit drawing element IDs override fuzzy name matching in export_parts.py
+    drawing_map:
+      EH-00800-P-0017: "81cbdd9ac479633d89c2d855"
+
+  EH-0080-BB2:
+    name: "EH-0080 BB-2 Compact Tunable Harvester"
+    description: "Compact tunable energy harvester — parallel coupling with pretension tuning concept"
+    document_id: "3f5298a8eb4385b9d8bc3c27"
+    workspace_id: "add893d5501dd87472e8ad89"
+    element_id: "424f4bf02221b45be3f85968"
+    url: "https://cad.onshape.com/documents/3f5298a8eb4385b9d8bc3c27/w/add893d5501dd87472e8ad89/e/424f4bf02221b45be3f85968"
+
+  HM-0070-EWS-V02:
+    name: "HM-0070 V0.2 (detail design)"
+    description: "EWS V0.2 vibration sensor — detail design"
+    document_id: "f1dcdb05cde101ab0e483ec1"
+    workspace_id: "ac31e78acb8f9c536a84542f"
+    element_id: "183a46320a5b1453a98b040a"
+    url: "https://cad.onshape.com/documents/f1dcdb05cde101ab0e483ec1/w/ac31e78acb8f9c536a84542f/e/183a46320a5b1453a98b040a"

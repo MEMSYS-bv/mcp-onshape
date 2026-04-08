@@ -1,0 +1,24 @@
+[project]
+name = "onshape-mcp-server"
+version = "0.2.0"
+description = "MCP Server + CLI tools for Onshape CAD integration with GitHub Copilot"
+authors = [{ name = "Sander" }]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+    "requests>=2.31.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+onshape = "cli:main"
+onshape-mcp = "onshape_mcp_server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]

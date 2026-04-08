@@ -1,0 +1,18 @@
+# Credentials — NEVER commit
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Exports
+*.step
+*.pdf
+
+# IDE
+.vscode/
+.idea/
