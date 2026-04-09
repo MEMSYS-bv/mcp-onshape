@@ -37,3 +37,11 @@ documents:
     workspace_id: "ac31e78acb8f9c536a84542f"
     element_id: "183a46320a5b1453a98b040a"
     url: "https://cad.onshape.com/documents/f1dcdb05cde101ab0e483ec1/w/ac31e78acb8f9c536a84542f/e/183a46320a5b1453a98b040a"
+
+  LAB-EMI-SHIELD-BENDER:
+    name: "EMI Shield Bender Jig"
+    description: "Jig for cutting and bending copper strips into square EMI shields"
+    document_id: "82cd600a2ce9523ca5027756"
+    workspace_id: "fb5003fbf159b17bc2a4cd21"
+    element_id: "5ab7c0c4fbcdacd60191d9b1"
+    url: "https://cad.onshape.com/documents/82cd600a2ce9523ca5027756/w/fb5003fbf159b17bc2a4cd21/e/5da6a4cdb816afb2041c4b0c"
