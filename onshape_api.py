@@ -62,6 +62,19 @@ class OnshapeClient:
         """Get all workspaces for a document."""
         return self._request("GET", f"/documents/d/{document_id}/workspaces")
 
+    def create_version(self, document_id: str, name: str,
+                       description: str = "") -> dict:
+        """Create a named version (immutable snapshot) of a document."""
+        return self._request("POST", f"/documents/d/{document_id}/versions", json={
+            "name": name,
+            "documentId": document_id,
+            "description": description,
+        })
+
+    def get_versions(self, document_id: str) -> list:
+        """Get all versions of a document."""
+        return self._request("GET", f"/documents/d/{document_id}/versions")
+
     # ── Variable Studios ──────────────────────────────────────────────────
 
     def get_variable_studios(self, document_id: str, workspace_id: str) -> list:
