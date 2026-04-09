@@ -633,6 +633,271 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["document_id", "workspace_id", "element_id", "output_path"]
             }
+        ),
+        Tool(
+            name="onshape_create_document",
+            description="Create a new Onshape document with a default Part Studio. Returns document_id, workspace_id, and element_id (Part Studio) for immediate use.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Name for the new document"
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Optional description"
+                    },
+                    "is_public": {
+                        "type": "boolean",
+                        "description": "Whether the document is publicly accessible (default: false)"
+                    }
+                },
+                "required": ["name"]
+            }
+        ),
+        Tool(
+            name="onshape_delete_document",
+            description="Delete an Onshape document permanently. WARNING: This is irreversible.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "document_id": {
+                        "type": "string",
+                        "description": "The Onshape document ID to delete"
+                    }
+                },
+                "required": ["document_id"]
+            }
+        ),
+        Tool(
+            name="onshape_add_feature",
+            description="Add a feature (sketch, extrude, etc.) to a Part Studio. Provide the raw feature JSON. Use onshape_create_cylinder for a simpler workflow.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "document_id": {
+                        "type": "string",
+                        "description": "The Onshape document ID"
+                    },
+                    "workspace_id": {
+                        "type": "string",
+                        "description": "The workspace ID"
+                    },
+                    "element_id": {
+                        "type": "string",
+                        "description": "The Part Studio element ID"
+                    },
+                    "feature": {
+                        "type": "object",
+                        "description": "Feature definition JSON (btType BTMFeature-134 or BTMSketch-151)"
+                    }
+                },
+                "required": ["document_id", "workspace_id", "element_id", "feature"]
+            }
+        ),
+        Tool(
+            name="onshape_create_cylinder",
+            description="Create a cylinder in a Part Studio by adding a circle sketch and extruding it. All dimensions in millimeters.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "document_id": {
+                        "type": "string",
+                        "description": "The Onshape document ID"
+                    },
+                    "workspace_id": {
+                        "type": "string",
+                        "description": "The workspace ID"
+                    },
+                    "element_id": {
+                        "type": "string",
+                        "description": "The Part Studio element ID"
+                    },
+                    "diameter_mm": {
+                        "type": "number",
+                        "description": "Cylinder diameter in millimeters"
+                    },
+                    "height_mm": {
+                        "type": "number",
+                        "description": "Cylinder height in millimeters"
+                    },
+                    "plane": {
+                        "type": "string",
+                        "description": "Sketch plane: 'Top', 'Front', or 'Right' (default: 'Top')",
+                        "enum": ["Top", "Front", "Right"]
+                    },
+                    "center_x_mm": {
+                        "type": "number",
+                        "description": "X position of center in mm (default: 0)"
+                    },
+                    "center_y_mm": {
+                        "type": "number",
+                        "description": "Y position of center in mm (default: 0)"
+                    }
+                },
+                "required": ["document_id", "workspace_id", "element_id", "diameter_mm", "height_mm"]
+            }
+        ),
+        Tool(
+            name="onshape_add_extrude",
+            description="Add an extrude feature to a Part Studio. Extrudes all regions of a specified sketch.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "document_id": {
+                        "type": "string",
+                        "description": "The Onshape document ID"
+                    },
+                    "workspace_id": {
+                        "type": "string",
+                        "description": "The workspace ID"
+                    },
+                    "element_id": {
+                        "type": "string",
+                        "description": "The Part Studio element ID"
+                    },
+                    "sketch_feature_id": {
+                        "type": "string",
+                        "description": "Feature ID of the sketch to extrude (from onshape_get_features or onshape_add_feature response)"
+                    },
+                    "depth_mm": {
+                        "type": "number",
+                        "description": "Extrusion depth in millimeters"
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Feature name (default: 'Extrude 1')"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "description": "Body operation: 'NEW', 'ADD' (join), 'REMOVE' (cut), 'INTERSECT'",
+                        "enum": ["NEW", "ADD", "REMOVE", "INTERSECT"]
+                    },
+                    "direction": {
+                        "type": "string",
+                        "description": "Extrude direction: 'BLIND', 'SYMMETRIC', 'THROUGH_ALL'",
+                        "enum": ["BLIND", "SYMMETRIC", "THROUGH_ALL"]
+                    }
+                },
+                "required": ["document_id", "workspace_id", "element_id", "sketch_feature_id", "depth_mm"]
+            }
+        ),
+        Tool(
+            name="onshape_add_sketch_circle",
+            description="Add a sketch with a single circle to a Part Studio. Returns the sketch feature ID for use with onshape_add_extrude.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "document_id": {
+                        "type": "string",
+                        "description": "The Onshape document ID"
+                    },
+                    "workspace_id": {
+                        "type": "string",
+                        "description": "The workspace ID"
+                    },
+                    "element_id": {
+                        "type": "string",
+                        "description": "The Part Studio element ID"
+                    },
+                    "radius_mm": {
+                        "type": "number",
+                        "description": "Circle radius in millimeters"
+                    },
+                    "plane": {
+                        "type": "string",
+                        "description": "Sketch plane: 'Top', 'Front', or 'Right' (default: 'Top')",
+                        "enum": ["Top", "Front", "Right"]
+                    },
+                    "center_x_mm": {
+                        "type": "number",
+                        "description": "X position of center in mm (default: 0)"
+                    },
+                    "center_y_mm": {
+                        "type": "number",
+                        "description": "Y position of center in mm (default: 0)"
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Sketch name (default: 'Sketch 1')"
+                    }
+                },
+                "required": ["document_id", "workspace_id", "element_id", "radius_mm"]
+            }
+        ),
+        Tool(
+            name="onshape_add_sketch_rectangle",
+            description="Add a sketch with a rectangle to a Part Studio. Returns the sketch feature ID for use with onshape_add_extrude.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "document_id": {
+                        "type": "string",
+                        "description": "The Onshape document ID"
+                    },
+                    "workspace_id": {
+                        "type": "string",
+                        "description": "The workspace ID"
+                    },
+                    "element_id": {
+                        "type": "string",
+                        "description": "The Part Studio element ID"
+                    },
+                    "width_mm": {
+                        "type": "number",
+                        "description": "Rectangle width in millimeters"
+                    },
+                    "height_mm": {
+                        "type": "number",
+                        "description": "Rectangle height in millimeters"
+                    },
+                    "plane": {
+                        "type": "string",
+                        "description": "Sketch plane: 'Top', 'Front', or 'Right' (default: 'Top')",
+                        "enum": ["Top", "Front", "Right"]
+                    },
+                    "center_x_mm": {
+                        "type": "number",
+                        "description": "X position of center in mm (default: 0)"
+                    },
+                    "center_y_mm": {
+                        "type": "number",
+                        "description": "Y position of center in mm (default: 0)"
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Sketch name (default: 'Sketch 1')"
+                    }
+                },
+                "required": ["document_id", "workspace_id", "element_id", "width_mm", "height_mm"]
+            }
+        ),
+        Tool(
+            name="onshape_delete_feature",
+            description="Delete a feature from a Part Studio by its feature ID.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "document_id": {
+                        "type": "string",
+                        "description": "The Onshape document ID"
+                    },
+                    "workspace_id": {
+                        "type": "string",
+                        "description": "The workspace ID"
+                    },
+                    "element_id": {
+                        "type": "string",
+                        "description": "The Part Studio element ID"
+                    },
+                    "feature_id": {
+                        "type": "string",
+                        "description": "The feature ID to delete"
+                    }
+                },
+                "required": ["document_id", "workspace_id", "element_id", "feature_id"]
+            }
         )
     ]
 
@@ -1339,7 +1604,148 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 result_text += "❌ Translation completed but no result file was produced.\n"
             
             return [TextContent(type="text", text=result_text)]
-        
+
+        elif name == "onshape_create_document":
+            result = client.create_document(
+                name=arguments["name"],
+                description=arguments.get("description", ""),
+                is_public=arguments.get("is_public", False),
+            )
+            return [TextContent(
+                type="text",
+                text=f"Document created: {result['name']}\n"
+                     f"document_id: {result['document_id']}\n"
+                     f"workspace_id: {result['workspace_id']}\n"
+                     f"element_id (Part Studio): {result['element_id']}\n"
+                     f"URL: {result['url']}"
+            )]
+
+        elif name == "onshape_delete_document":
+            result = client.delete_document(arguments["document_id"])
+            return [TextContent(
+                type="text",
+                text=f"Document {result['document_id']} deleted permanently."
+            )]
+
+        elif name == "onshape_add_feature":
+            result = client.add_feature(
+                arguments["document_id"],
+                arguments["workspace_id"],
+                arguments["element_id"],
+                arguments["feature"],
+            )
+            feature = result.get("feature", {})
+            state = result.get("featureState", {})
+            return [TextContent(
+                type="text",
+                text=f"Feature added: {feature.get('name', '?')}\n"
+                     f"featureId: {feature.get('featureId', '?')}\n"
+                     f"featureType: {feature.get('featureType', '?')}\n"
+                     f"status: {state.get('featureStatus', '?')}"
+            )]
+
+        elif name == "onshape_create_cylinder":
+            result = client.create_cylinder(
+                arguments["document_id"],
+                arguments["workspace_id"],
+                arguments["element_id"],
+                diameter_mm=arguments["diameter_mm"],
+                height_mm=arguments["height_mm"],
+                plane=arguments.get("plane", "Top"),
+                center_x_mm=arguments.get("center_x_mm", 0.0),
+                center_y_mm=arguments.get("center_y_mm", 0.0),
+            )
+            return [TextContent(
+                type="text",
+                text=f"Cylinder created:\n"
+                     f"  Sketch featureId: {result['sketch']['featureId']}\n"
+                     f"  Sketch status: {result['sketch']['state'].get('featureStatus', '?')}\n"
+                     f"  Extrude featureId: {result['extrude']['featureId']}\n"
+                     f"  Extrude status: {result['extrude']['state'].get('featureStatus', '?')}"
+            )]
+
+        elif name == "onshape_add_extrude":
+            extrude = client.build_extrude(
+                sketch_feature_id=arguments["sketch_feature_id"],
+                depth_mm=arguments["depth_mm"],
+                name=arguments.get("name", "Extrude 1"),
+                operation=arguments.get("operation", "NEW"),
+                direction=arguments.get("direction", "BLIND"),
+            )
+            result = client.add_feature(
+                arguments["document_id"],
+                arguments["workspace_id"],
+                arguments["element_id"],
+                extrude,
+            )
+            feature = result.get("feature", {})
+            state = result.get("featureState", {})
+            return [TextContent(
+                type="text",
+                text=f"Extrude added: {feature.get('name', '?')}\n"
+                     f"featureId: {feature.get('featureId', '?')}\n"
+                     f"status: {state.get('featureStatus', '?')}"
+            )]
+
+        elif name == "onshape_add_sketch_circle":
+            sketch = client.build_sketch_circle(
+                name=arguments.get("name", "Sketch 1"),
+                plane=arguments.get("plane", "Top"),
+                radius_mm=arguments["radius_mm"],
+                center_x_mm=arguments.get("center_x_mm", 0.0),
+                center_y_mm=arguments.get("center_y_mm", 0.0),
+            )
+            result = client.add_feature(
+                arguments["document_id"],
+                arguments["workspace_id"],
+                arguments["element_id"],
+                sketch,
+            )
+            feature = result.get("feature", {})
+            state = result.get("featureState", {})
+            return [TextContent(
+                type="text",
+                text=f"Sketch added: {feature.get('name', '?')}\n"
+                     f"featureId: {feature.get('featureId', '?')}\n"
+                     f"status: {state.get('featureStatus', '?')}"
+            )]
+
+        elif name == "onshape_add_sketch_rectangle":
+            sketch = client.build_sketch_rectangle(
+                name=arguments.get("name", "Sketch 1"),
+                plane=arguments.get("plane", "Top"),
+                width_mm=arguments["width_mm"],
+                height_mm=arguments["height_mm"],
+                center_x_mm=arguments.get("center_x_mm", 0.0),
+                center_y_mm=arguments.get("center_y_mm", 0.0),
+            )
+            result = client.add_feature(
+                arguments["document_id"],
+                arguments["workspace_id"],
+                arguments["element_id"],
+                sketch,
+            )
+            feature = result.get("feature", {})
+            state = result.get("featureState", {})
+            return [TextContent(
+                type="text",
+                text=f"Sketch added: {feature.get('name', '?')}\n"
+                     f"featureId: {feature.get('featureId', '?')}\n"
+                     f"status: {state.get('featureStatus', '?')}"
+            )]
+
+        elif name == "onshape_delete_feature":
+            result = client.delete_feature(
+                arguments["document_id"],
+                arguments["workspace_id"],
+                arguments["element_id"],
+                arguments["feature_id"],
+            )
+            return [TextContent(
+                type="text",
+                text=f"Feature {arguments['feature_id']} deleted."
+            )]
+
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
             

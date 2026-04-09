@@ -30,7 +30,7 @@ footer: "MEMSYS B.V. - For intended recipients only"
 Ask Copilot questions about your Onshape documents:
 
 - "What variables are in BB-2?"
-- "Show me the BOM for the baseline build"
+- "Show me the BOM for the BB-1V3"
 - "What material is the baseplate?"
 
 Copilot reads directly from Onshape — no copy-paste needed.
@@ -44,6 +44,7 @@ Push changes from chat:
 - "Set the beam length to 45 mm"
 - "Change the baseplate material to Aluminum 6061"
 - "Update all three stiffness variables at once"
+- "Assign the following numbers, names and materials to the parts"
 
 Changes appear in Onshape immediately.
 
@@ -55,6 +56,7 @@ Generate deliverables without leaving the editor:
 
 - "Export the linear guide frame as STEP"
 - "Download the drawing for P-0017 as PDF"
+- "Export all custom made parts as steps and drawings" 
 
 Files are saved locally with proper naming conventions.
 

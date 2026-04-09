@@ -11,6 +11,8 @@ Usage:
   python cli.py meta EH-0080-BB1 --list              # Part metadata
   python cli.py check                                 # Connection test
   python cli.py docs                                  # List registered docs
+  python cli.py create "My Document"                  # Create new document
+  python cli.py cylinder --did X --wid Y --eid Z --diameter 30 --height 100
 """
 
 import sys
@@ -54,10 +56,70 @@ def main():
         from onshape_mcp_server import main as server_main
         asyncio.run(server_main())
 
+    elif command == "create":
+        _cmd_create()
+
+    elif command == "cylinder":
+        _cmd_cylinder()
+
     else:
         print(f"Unknown command: {command}")
-        print("Available commands: bom, export, vars, meta, check, docs, server")
+        print("Available commands: bom, export, vars, meta, check, docs, server, create, cylinder")
         sys.exit(1)
+
+
+def _cmd_create():
+    """Create a new Onshape document."""
+    import argparse
+    parser = argparse.ArgumentParser(description="Create a new Onshape document")
+    parser.add_argument("name", help="Document name")
+    parser.add_argument("--description", "-d", default="", help="Document description")
+    parser.add_argument("--public", action="store_true", help="Make document public")
+    args = parser.parse_args()
+
+    from onshape_api import OnshapeClient
+    client = OnshapeClient()
+    result = client.create_document(args.name, args.description, args.public)
+
+    print(f"Document created: {result['name']}")
+    print(f"  document_id:  {result['document_id']}")
+    print(f"  workspace_id: {result['workspace_id']}")
+    print(f"  element_id:   {result['element_id']}")
+    print(f"  URL: {result['url']}")
+
+
+def _cmd_cylinder():
+    """Create a cylinder in a Part Studio."""
+    import argparse
+    parser = argparse.ArgumentParser(description="Create a cylinder in a Part Studio")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--url", help="Onshape URL of the Part Studio")
+    group.add_argument("--did", help="Document ID (use with --wid and --eid)")
+    parser.add_argument("--wid", help="Workspace ID")
+    parser.add_argument("--eid", help="Part Studio element ID")
+    parser.add_argument("--diameter", type=float, required=True, help="Diameter in mm")
+    parser.add_argument("--height", type=float, required=True, help="Height in mm")
+    parser.add_argument("--plane", default="Top", choices=["Top", "Front", "Right"],
+                        help="Sketch plane (default: Top)")
+    args = parser.parse_args()
+
+    from onshape_api import OnshapeClient
+    client = OnshapeClient()
+
+    if args.url:
+        from document_registry import parse_onshape_url
+        ids = parse_onshape_url(args.url)
+        did, wid, eid = ids["document_id"], ids["workspace_id"], ids["element_id"]
+    else:
+        if not args.wid or not args.eid:
+            parser.error("--wid and --eid are required when using --did")
+        did, wid, eid = args.did, args.wid, args.eid
+
+    result = client.create_cylinder(did, wid, eid, args.diameter, args.height,
+                                    plane=args.plane)
+    print(f"Cylinder created (diameter={args.diameter}mm, height={args.height}mm):")
+    print(f"  Sketch:  {result['sketch']['featureId']} — {result['sketch']['state'].get('featureStatus', '?')}")
+    print(f"  Extrude: {result['extrude']['featureId']} — {result['extrude']['state'].get('featureStatus', '?')}")
 
 
 if __name__ == "__main__":

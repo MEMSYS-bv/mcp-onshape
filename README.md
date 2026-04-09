@@ -8,17 +8,18 @@ An MCP (Model Context Protocol) server that integrates Onshape with GitHub Copil
 
 ```
 mcp-onshape/
-├── cli.py                  # Unified CLI entry point (bom, export, vars, meta, check, docs)
+├── cli.py                  # Unified CLI entry point (bom, export, vars, meta, check, docs, create, cylinder)
 ├── constants.py            # Shared constants (header IDs, template refs, etc.)
 ├── document_registry.py    # YAML registry lookup + URL parsing
 ├── onshape_api.py          # Shared OnshapeClient class
 ├── onshape_documents.yaml  # Document registry (project code → doc IDs)
-├── onshape_mcp_server.py   # MCP server (23 tools for Copilot)
+├── onshape_mcp_server.py   # MCP server (32 tools for Copilot)
 ├── extract_bom.py          # CLI: BOM extraction
 ├── export_parts.py         # CLI: STEP + PDF export
 ├── sync_variables.py       # CLI: Variable Studio ↔ CSV sync
 ├── set_part_metadata.py    # CLI: Part number / name / description
 ├── test_connection.py      # CLI: API connectivity test
+├── test_api.py              # Comprehensive test suite (15 tests)
 ├── pyproject.toml           # Package definition
 ├── .env                     # API keys (git-ignored)
 ├── .env.example             # Template for .env
@@ -62,6 +63,9 @@ Scripts identify Onshape documents via (in order of preference):
 - **Parse URLs**: Extract document/workspace/element IDs from Onshape URLs
 - **Document Registry**: YAML-based registry linking project codes to OnShape documents
 - **Document Discovery**: Search across your Onshape account, get full document summaries
+- **Document Creation**: Create new Onshape documents programmatically
+- **Feature Creation**: Add sketches (circles, rectangles) and extrudes to Part Studios
+- **Cylinder Builder**: High-level one-call cylinder creation (sketch + extrude)
 - **Feature Inspection**: Read Part Studio feature trees (sketches, extrudes, etc.)
 - **Assembly Analysis**: Get full assembly definition with instances, mates, and sub-assemblies
 - **Material Management**: List 189 materials from the Onshape library, set materials on parts
@@ -135,6 +139,29 @@ python set_part_metadata.py EH-0080-BB2 --dry-run --set ...
 ```bash
 python test_connection.py                                   # test first registered doc
 python test_connection.py EH-0080-BB1                       # test specific document
+```
+
+### `cli.py create` — Create New Document
+
+```bash
+python cli.py create "My New Assembly"                      # create document
+python cli.py create "Motor Housing" -d "V2 design"         # with description
+```
+
+### `cli.py cylinder` — Create Cylinder in Part Studio
+
+```bash
+python cli.py cylinder --did X --wid Y --eid Z --diameter 30 --height 100
+python cli.py cylinder --url "https://..." --diameter 20 --height 50 --plane Front
+```
+
+### `test_api.py` — Comprehensive API Test Suite
+
+```bash
+python test_api.py                    # run all 15 tests
+python test_api.py --keep             # keep test document (inspect in Onshape)
+python test_api.py --verbose          # show full tracebacks
+python test_api.py --test "cylinder"  # run single test by name
 ```
 
 ## Document Registry
@@ -231,12 +258,14 @@ Once configured, you can ask Copilot things like:
 - "Show me all Part Studios in this document"
 - "What features does this Part Studio have?"
 - "Show the assembly structure of BB-1"
+- "Create a new document called testMCP"
+- "Make a cylinder of 30mm diameter and 100mm height"
 
 ## API Reference
 
-### Tools (23 total)
+### Tools (32 total)
 
-#### Document Discovery
+#### Document Management
 
 | Tool | Description |
 |------|-------------|
@@ -244,6 +273,8 @@ Once configured, you can ask Copilot things like:
 | `onshape_search_documents` | Search for documents by name across your Onshape account |
 | `onshape_get_document_summary` | Get comprehensive document summary: all workspaces + elements |
 | `onshape_parse_url` | Parse Onshape URL to IDs |
+| `onshape_create_document` | Create a new Onshape document with default Part Studio |
+| `onshape_delete_document` | Delete a document permanently (requires delete API key permission) |
 
 #### Variable Studio
 
@@ -261,6 +292,12 @@ Once configured, you can ask Copilot things like:
 | `onshape_get_parts` | Get all parts in a Part Studio or Assembly |
 | `onshape_find_part_studios` | Find Part Studios by name pattern |
 | `onshape_get_features` | Get Part Studio feature tree (sketches, extrudes, etc.) |
+| `onshape_add_feature` | Add a raw feature (sketch/extrude/etc.) to a Part Studio |
+| `onshape_add_sketch_circle` | Add a sketch with a circle to a Part Studio |
+| `onshape_add_sketch_rectangle` | Add a sketch with a rectangle to a Part Studio |
+| `onshape_add_extrude` | Add an extrude feature to a Part Studio |
+| `onshape_create_cylinder` | High-level: create a cylinder (circle sketch + extrude) in one call |
+| `onshape_delete_feature` | Delete a feature from a Part Studio |
 
 #### Assembly & BOM
 

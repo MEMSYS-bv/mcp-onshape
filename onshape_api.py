@@ -62,6 +62,64 @@ class OnshapeClient:
         """Get all workspaces for a document."""
         return self._request("GET", f"/documents/d/{document_id}/workspaces")
 
+    def create_document(self, name: str, description: str = "",
+                        is_public: bool = False) -> dict:
+        """Create a new Onshape document with a default Part Studio.
+
+        Args:
+            name: Document name
+            description: Optional description
+            is_public: Whether the document is publicly accessible
+
+        Returns:
+            dict with keys: document_id, workspace_id, element_id (Part Studio),
+            name, url — ready for immediate use with other API methods.
+        """
+        body = {
+            "name": name,
+            "description": description,
+            "isPublic": is_public,
+        }
+        result = self._request("POST", "/documents", json=body)
+
+        doc_id = result.get("id")
+        ws_id = result.get("defaultWorkspace", {}).get("id")
+
+        # Find the default Part Studio element
+        elements = self.get_elements(doc_id, ws_id)
+        part_studio = next(
+            (e for e in elements if e.get("elementType") == "PARTSTUDIO"),
+            None,
+        )
+        ps_id = part_studio["id"] if part_studio else None
+
+        return {
+            "document_id": doc_id,
+            "workspace_id": ws_id,
+            "element_id": ps_id,
+            "name": result.get("name"),
+            "url": f"{self.base_url}/documents/{doc_id}/w/{ws_id}/e/{ps_id}",
+        }
+
+    def delete_document(self, document_id: str) -> dict:
+        """Delete a document permanently.
+
+        WARNING: This is irreversible. Requires delete permission on API key.
+        If the API key lacks delete permission, raises an error with instructions.
+        """
+        url = f"{self.base_url}/api/v10/documents/{document_id}"
+        response = requests.request(
+            "DELETE", url, auth=self.auth, headers=self.headers, timeout=30,
+        )
+        if response.status_code == 403:
+            raise PermissionError(
+                "API key lacks delete permission. "
+                "Go to https://cad.onshape.com/appstore/dev-portal → API keys → "
+                "edit your key → enable 'Application can delete your documents'."
+            )
+        response.raise_for_status()
+        return {"status": "deleted", "document_id": document_id}
+
     # ── Variable Studios ──────────────────────────────────────────────────
 
     def get_variable_studios(self, document_id: str, workspace_id: str) -> list:
@@ -218,6 +276,308 @@ class OnshapeClient:
             "GET",
             f"/partstudios/d/{document_id}/w/{workspace_id}/e/{element_id}/features",
         )
+
+    def add_feature(self, document_id: str, workspace_id: str,
+                    element_id: str, feature: dict) -> dict:
+        """Add a single feature to a Part Studio's feature list.
+
+        The feature is added immediately before the rollback bar.
+
+        Args:
+            feature: Feature definition dict (btType BTMFeature-134 or BTMSketch-151).
+                     Use the helper methods (build_sketch_circle, build_extrude, etc.)
+                     to construct valid feature payloads.
+
+        Returns:
+            API response with the created feature (including assigned featureId)
+            and feature state.
+        """
+        body = {
+            "btType": "BTFeatureDefinitionCall-1406",
+            "feature": feature,
+        }
+        return self._request(
+            "POST",
+            f"/partstudios/d/{document_id}/w/{workspace_id}/e/{element_id}/features",
+            json=body,
+        )
+
+    def delete_feature(self, document_id: str, workspace_id: str,
+                       element_id: str, feature_id: str) -> dict:
+        """Delete a feature from a Part Studio by feature ID."""
+        return self._request(
+            "DELETE",
+            f"/partstudios/d/{document_id}/w/{workspace_id}/e/{element_id}"
+            f"/features/featureid/{feature_id}",
+        )
+
+    # ── Feature Builders (static helpers) ─────────────────────────────────
+
+    @staticmethod
+    def build_sketch_circle(name: str = "Sketch 1",
+                            plane: str = "Top",
+                            radius_mm: float = 15.0,
+                            center_x_mm: float = 0.0,
+                            center_y_mm: float = 0.0) -> dict:
+        """Build a sketch feature with a single circle.
+
+        Args:
+            name: Feature name displayed in the feature tree
+            plane: Reference plane — 'Top', 'Front', or 'Right'
+            radius_mm: Circle radius in millimeters
+            center_x_mm: X position of center in millimeters
+            center_y_mm: Y position of center in millimeters
+
+        Returns:
+            Feature dict ready for add_feature().
+        """
+        # Onshape API uses meters internally
+        radius_m = radius_mm / 1000.0
+        cx_m = center_x_mm / 1000.0
+        cy_m = center_y_mm / 1000.0
+
+        return {
+            "btType": "BTMSketch-151",
+            "featureType": "newSketch",
+            "name": name,
+            "suppressed": False,
+            "parameters": [
+                {
+                    "btType": "BTMParameterQueryList-148",
+                    "queries": [
+                        {
+                            "btType": "BTMIndividualQuery-138",
+                            "queryString": (
+                                f'query=qCreatedBy(makeId("{plane}"), '
+                                f'EntityType.FACE);'
+                            ),
+                        }
+                    ],
+                    "parameterId": "sketchPlane",
+                }
+            ],
+            "entities": [
+                {
+                    "btType": "BTMSketchCurve-4",
+                    "geometry": {
+                        "btType": "BTCurveGeometryCircle-115",
+                        "radius": radius_m,
+                        "xCenter": cx_m,
+                        "yCenter": cy_m,
+                        "xDir": 1,
+                        "yDir": 0,
+                        "clockwise": False,
+                    },
+                    "centerId": "circle-entity.center",
+                    "entityId": "circle-entity",
+                }
+            ],
+            "constraints": [],
+        }
+
+    @staticmethod
+    def build_sketch_rectangle(name: str = "Sketch 1",
+                               plane: str = "Top",
+                               width_mm: float = 30.0,
+                               height_mm: float = 20.0,
+                               center_x_mm: float = 0.0,
+                               center_y_mm: float = 0.0) -> dict:
+        """Build a sketch feature with a rectangle (4 lines).
+
+        Args:
+            name: Feature name displayed in the feature tree
+            plane: Reference plane — 'Top', 'Front', or 'Right'
+            width_mm: Rectangle width in millimeters
+            height_mm: Rectangle height in millimeters
+            center_x_mm: X position of center in millimeters
+            center_y_mm: Y position of center in millimeters
+
+        Returns:
+            Feature dict ready for add_feature().
+        """
+        hw = (width_mm / 2.0) / 1000.0   # half-width in meters
+        hh = (height_mm / 2.0) / 1000.0  # half-height in meters
+        cx = center_x_mm / 1000.0
+        cy = center_y_mm / 1000.0
+
+        # Define four corners
+        x0, y0 = cx - hw, cy - hh  # bottom-left
+        x1, y1 = cx + hw, cy - hh  # bottom-right
+        x2, y2 = cx + hw, cy + hh  # top-right
+        x3, y3 = cx - hw, cy + hh  # top-left
+
+        def line_entity(entity_id, px, py, dx, dy, start_param, end_param,
+                        start_id, end_id):
+            return {
+                "btType": "BTMSketchCurveSegment-155",
+                "geometry": {
+                    "btType": "BTCurveGeometryLine-117",
+                    "pntX": px, "pntY": py,
+                    "dirX": dx, "dirY": dy,
+                },
+                "entityId": entity_id,
+                "startPointId": start_id,
+                "endPointId": end_id,
+                "startParam": start_param,
+                "endParam": end_param,
+                "isConstruction": False,
+            }
+
+        return {
+            "btType": "BTMSketch-151",
+            "featureType": "newSketch",
+            "name": name,
+            "suppressed": False,
+            "parameters": [
+                {
+                    "btType": "BTMParameterQueryList-148",
+                    "queries": [
+                        {
+                            "btType": "BTMIndividualQuery-138",
+                            "queryString": (
+                                f'query=qCreatedBy(makeId("{plane}"), '
+                                f'EntityType.FACE);'
+                            ),
+                        }
+                    ],
+                    "parameterId": "sketchPlane",
+                }
+            ],
+            "entities": [
+                line_entity("rect.bottom", x0, y0, 1, 0, 0, width_mm / 1000.0,
+                            "rect.bottom.start", "rect.bottom.end"),
+                line_entity("rect.right", x1, y1, 0, 1, 0, height_mm / 1000.0,
+                            "rect.right.start", "rect.right.end"),
+                line_entity("rect.top", x2, y2, -1, 0, 0, width_mm / 1000.0,
+                            "rect.top.start", "rect.top.end"),
+                line_entity("rect.left", x3, y3, 0, -1, 0, height_mm / 1000.0,
+                            "rect.left.start", "rect.left.end"),
+            ],
+            "constraints": [],
+        }
+
+    @staticmethod
+    def build_extrude(sketch_feature_id: str,
+                      depth_mm: float = 10.0,
+                      name: str = "Extrude 1",
+                      operation: str = "NEW",
+                      direction: str = "BLIND") -> dict:
+        """Build an extrude feature that extrudes all regions of a sketch.
+
+        Args:
+            sketch_feature_id: featureId of the sketch to extrude
+            depth_mm: Extrusion depth in millimeters
+            name: Feature name displayed in the feature tree
+            operation: 'NEW' (new body), 'ADD' (join), 'REMOVE' (cut), 'INTERSECT'
+            direction: 'BLIND' (one direction), 'SYMMETRIC' (both), 'THROUGH_ALL'
+
+        Returns:
+            Feature dict ready for add_feature().
+        """
+        params = [
+            {
+                "btType": "BTMParameterEnum-145",
+                "value": "SOLID",
+                "enumName": "ExtendedToolBodyType",
+                "parameterId": "bodyType",
+            },
+            {
+                "btType": "BTMParameterEnum-145",
+                "value": operation,
+                "enumName": "NewBodyOperationType",
+                "parameterId": "operationType",
+            },
+            {
+                "btType": "BTMParameterQueryList-148",
+                "queries": [
+                    {
+                        "btType": "BTMIndividualSketchRegionQuery-140",
+                        "featureId": sketch_feature_id,
+                    }
+                ],
+                "parameterId": "entities",
+            },
+            {
+                "btType": "BTMParameterEnum-145",
+                "value": direction,
+                "enumName": "BoundingType",
+                "parameterId": "endBound",
+            },
+        ]
+
+        if direction != "THROUGH_ALL":
+            params.append({
+                "btType": "BTMParameterQuantity-147",
+                "expression": f"{depth_mm} mm",
+                "parameterId": "depth",
+                "isInteger": False,
+            })
+
+        return {
+            "btType": "BTMFeature-134",
+            "featureType": "extrude",
+            "name": name,
+            "suppressed": False,
+            "parameters": params,
+            "returnAfterSubfeatures": False,
+        }
+
+    def create_cylinder(self, document_id: str, workspace_id: str,
+                        element_id: str, diameter_mm: float,
+                        height_mm: float, plane: str = "Top",
+                        center_x_mm: float = 0.0,
+                        center_y_mm: float = 0.0) -> dict:
+        """High-level helper: create a cylinder in a Part Studio.
+
+        Creates a circle sketch and extrudes it.
+
+        Args:
+            diameter_mm: Cylinder diameter in mm
+            height_mm: Cylinder height (extrude depth) in mm
+            plane: Sketch plane ('Top', 'Front', 'Right')
+            center_x_mm: X position of center in mm
+            center_y_mm: Y position of center in mm
+
+        Returns:
+            dict with 'sketch' and 'extrude' responses.
+        """
+        radius_mm = diameter_mm / 2.0
+
+        # Step 1: Add sketch with circle
+        sketch = self.build_sketch_circle(
+            name="Cylinder Sketch",
+            plane=plane,
+            radius_mm=radius_mm,
+            center_x_mm=center_x_mm,
+            center_y_mm=center_y_mm,
+        )
+        sketch_result = self.add_feature(document_id, workspace_id, element_id, sketch)
+
+        # Extract the assigned feature ID for the extrude reference
+        sketch_fid = sketch_result.get("feature", {}).get("featureId")
+        if not sketch_fid:
+            raise RuntimeError(
+                f"Sketch creation failed: {sketch_result.get('featureState', {})}"
+            )
+
+        # Step 2: Extrude the sketch
+        extrude = self.build_extrude(
+            sketch_feature_id=sketch_fid,
+            depth_mm=height_mm,
+            name="Cylinder Extrude",
+        )
+        extrude_result = self.add_feature(document_id, workspace_id, element_id, extrude)
+
+        return {
+            "sketch": {
+                "featureId": sketch_fid,
+                "state": sketch_result.get("featureState", {}),
+            },
+            "extrude": {
+                "featureId": extrude_result.get("feature", {}).get("featureId"),
+                "state": extrude_result.get("featureState", {}),
+            },
+        }
 
     # ── Search ────────────────────────────────────────────────────────────
 
