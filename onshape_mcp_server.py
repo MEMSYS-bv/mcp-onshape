@@ -898,6 +898,43 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["document_id", "workspace_id", "element_id", "feature_id"]
             }
+        ),
+        # ========== VERSION TOOLS ==========
+        Tool(
+            name="onshape_create_version",
+            description="Create a named version (immutable snapshot) of an Onshape document. Versions freeze all Part Studios, Assemblies, and other elements at their current state.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "document_id": {
+                        "type": "string",
+                        "description": "The Onshape document ID"
+                    },
+                    "version_name": {
+                        "type": "string",
+                        "description": "Name for the new version (e.g., 'V1', 'V2 - Updated geometry')"
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Optional description for the version"
+                    }
+                },
+                "required": ["document_id", "version_name"]
+            }
+        ),
+        Tool(
+            name="onshape_list_versions",
+            description="List all named versions of an Onshape document",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "document_id": {
+                        "type": "string",
+                        "description": "The Onshape document ID"
+                    }
+                },
+                "required": ["document_id"]
+            }
         )
     ]
 
@@ -1745,6 +1782,34 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 type="text",
                 text=f"Feature {arguments['feature_id']} deleted."
             )]
+
+        # ========== VERSION TOOL HANDLERS ==========
+        elif name == "onshape_create_version":
+            did = arguments["document_id"]
+            version_name = arguments["version_name"]
+            description = arguments.get("description", "")
+            result = client.create_version(did, version_name, description)
+            result_text = (
+                f"Version created successfully!\n"
+                f"  Name: {result['name']}\n"
+                f"  ID: {result['id']}\n"
+            )
+            if result.get("description"):
+                result_text += f"  Description: {result['description']}\n"
+            return [TextContent(type="text", text=result_text)]
+
+        elif name == "onshape_list_versions":
+            did = arguments["document_id"]
+            versions = client.get_versions(did)
+            if not versions:
+                return [TextContent(type="text", text="No versions found for this document.")]
+            result_text = "Versions:\n"
+            for v in versions:
+                desc = f" \u2014 {v['description']}" if v.get("description") else ""
+                result_text += f"  {v['name']}{desc}\n"
+                result_text += f"    ID: {v['id']}\n"
+                result_text += f"    Created: {v.get('createdAt', 'unknown')}\n"
+            return [TextContent(type="text", text=result_text)]
 
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]

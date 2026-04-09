@@ -120,6 +120,19 @@ class OnshapeClient:
         response.raise_for_status()
         return {"status": "deleted", "document_id": document_id}
 
+    def create_version(self, document_id: str, name: str,
+                       description: str = "") -> dict:
+        """Create a named version (immutable snapshot) of a document."""
+        return self._request("POST", f"/documents/d/{document_id}/versions", json={
+            "name": name,
+            "documentId": document_id,
+            "description": description,
+        })
+
+    def get_versions(self, document_id: str) -> list:
+        """Get all versions of a document."""
+        return self._request("GET", f"/documents/d/{document_id}/versions")
+
     # ── Variable Studios ──────────────────────────────────────────────────
 
     def get_variable_studios(self, document_id: str, workspace_id: str) -> list:
