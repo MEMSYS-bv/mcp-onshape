@@ -13,7 +13,9 @@ BOM_HEADERS = {
     "part_number": "57f3fb8efa3416c06701d60f",
     "description": "57f3fb8efa3416c06701d60e",
     "material": "57f3fb8efa3416c06701d615",
+    "revision": "57f3fb8efa3416c06701d616",
     "mass": "57f3fb8efa3416c06701d626",
+    "state": "57f3fb8efa3416c06701d611",
 }
 
 # ── Metadata property IDs ─────────────────────────────────────────────────────

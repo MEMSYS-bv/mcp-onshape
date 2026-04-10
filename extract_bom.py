@@ -41,12 +41,29 @@ ONSHAPE_SECRET_KEY = os.getenv("ONSHAPE_SECRET_KEY", "")
 
 # ── BOM Extraction ────────────────────────────────────────────────────────────
 
-def extract_bom(client: OnshapeClient, doc_id: str, ws_id: str, elem_id: str) -> list:
-    """Extract and parse BOM rows into a clean list of dicts."""
+# Standard columns (always extracted)
+STANDARD_FIELDS = ["item", "name", "part_number", "description", "quantity", "material", "revision", "mass"]
+
+
+def extract_bom(client: OnshapeClient, doc_id: str, ws_id: str, elem_id: str,
+                extended: bool = False) -> list:
+    """Extract and parse BOM rows into a clean list of dicts.
+
+    Args:
+        extended: If True, include all available metadata columns.
+                  If False (default), only standard columns are returned.
+    """
     bom = client.get_assembly_bom(doc_id, ws_id, elem_id)
     rows = bom.get("rows", [])
-    result = []
 
+    # Build reverse header map from the response
+    all_headers = {}
+    for h in bom.get("headers", []):
+        hid = h.get("id", "")
+        name = h.get("name", "") or h.get("propertyName", "")
+        all_headers[hid] = name
+
+    result = []
     for row in rows:
         hv = row.get("headerIdToValue", {})
 
@@ -63,14 +80,25 @@ def extract_bom(client: OnshapeClient, doc_id: str, ws_id: str, elem_id: str) ->
         qty_raw = hv.get(HEADER_IDS["quantity"], 1.0)
         qty = int(qty_raw) if isinstance(qty_raw, (int, float)) else qty_raw
 
-        result.append({
+        entry = {
             "item": hv.get(HEADER_IDS["item"], ""),
-            "part_number": hv.get(HEADER_IDS["part_number"]) or "—",
             "name": hv.get(HEADER_IDS["name"], "N/A"),
+            "part_number": hv.get(HEADER_IDS["part_number"]) or "—",
+            "description": hv.get(HEADER_IDS.get("description", ""), "") or "",
             "quantity": qty,
             "material": material,
-            "mass": hv.get(HEADER_IDS["mass"], "N/A"),
-        })
+            "revision": hv.get(HEADER_IDS.get("revision", ""), "") or "",
+            "mass": hv.get(HEADER_IDS.get("mass", ""), "N/A"),
+        }
+
+        if extended:
+            # Add all remaining metadata columns
+            for hid, val in hv.items():
+                col_name = all_headers.get(hid, hid)
+                if col_name not in entry and not isinstance(val, (dict, list)):
+                    entry[col_name] = val
+
+        result.append(entry)
 
     return result
 
@@ -81,15 +109,17 @@ def format_markdown(bom_rows: list, doc_name: str = "") -> str:
     if doc_name:
         lines.append(f"**Source:** {doc_name}")
         lines.append("")
-    lines.append("| # | Part Number | Name | Qty | Material | Mass |")
-    lines.append("|---|-------------|------|-----|----------|------|")
+    lines.append("| # | Part Number | Name | Description | Qty | Material | Rev | Mass |")
+    lines.append("|---|-------------|------|-------------|-----|----------|-----|------|")
     for i, row in enumerate(bom_rows, 1):
         pn = str(row["part_number"])[:20]
         name = str(row["name"])[:40]
+        desc = str(row.get("description", ""))[:30]
         qty = row["quantity"]
         mat = str(row["material"])[:28]
+        rev = str(row.get("revision", ""))[:8]
         mass = row["mass"]
-        lines.append(f"| {i} | {pn} | {name} | {qty} | {mat} | {mass} |")
+        lines.append(f"| {i} | {pn} | {name} | {desc} | {qty} | {mat} | {rev} | {mass} |")
     lines.append(f"\n**Total:** {len(bom_rows)} items")
     return "\n".join(lines)
 
@@ -115,6 +145,8 @@ def main():
     parser.add_argument("--list", action="store_true", help="List all registered documents")
     parser.add_argument("--format", choices=["markdown", "json"], default="markdown",
                         help="Output format (default: markdown)")
+    parser.add_argument("--extended", action="store_true",
+                        help="Include all available metadata columns (default: standard only)")
     args = parser.parse_args()
 
     if args.list:
@@ -151,7 +183,7 @@ def main():
     print(f"Document: {doc_id} / Workspace: {ws_id} / Element: {elem_id}\n")
 
     # Extract BOM
-    bom_rows = extract_bom(client, doc_id, ws_id, elem_id)
+    bom_rows = extract_bom(client, doc_id, ws_id, elem_id, extended=args.extended)
 
     # Output
     if args.format == "json":
