@@ -80,8 +80,21 @@ def make_filename(part_number: str, revision: str, name: str, extension: str) ->
 # --- Main export logic ---
 
 
+def match_drawing_by_part_number(drawings: list[dict], part_number: str) -> dict | None:
+    """Find a drawing by exact '{PartNumber} Drawing' naming convention.
+
+    This is the primary lookup strategy per the design guide.
+    """
+    expected = f"{part_number} Drawing"
+    expected_lower = expected.lower()
+    for d in drawings:
+        if d.get("name", "").lower() == expected_lower:
+            return d
+    return None
+
+
 def match_drawing_to_part(drawings: list[dict], part_name: str) -> dict | None:
-    """Find a drawing that matches a part name.
+    """Find a drawing that matches a part name (fuzzy fallback).
     
     Handles naming patterns like:
       - "Linear guide frame Drawing 1"   (space-separated + Drawing N)
@@ -214,7 +227,7 @@ def export_parts_workflow(client: OnshapeClient, did: str, wid: str,
             print(f"  ERROR exporting STEP: {e}")
         
         # Find and export matching drawing as PDF
-        # Check explicit drawing map first, fall back to fuzzy matching
+        # Priority: 1. explicit drawing_map  2. exact {PartNumber} Drawing  3. fuzzy name match
         drawing = None
         if drawing_map and pn in drawing_map:
             mapped_eid = drawing_map[pn]
@@ -225,9 +238,14 @@ def export_parts_workflow(client: OnshapeClient, did: str, wid: str,
                 print(f"  WARNING: drawing_map entry {mapped_eid} not found in document")
         
         if not drawing:
+            drawing = match_drawing_by_part_number(drawings, pn)
+            if drawing:
+                print(f"  Drawing (exact match): {drawing['name']} ({drawing['id'][:12]}...)")
+
+        if not drawing:
             drawing = match_drawing_to_part(drawings, name)
             if drawing:
-                print(f"  Found drawing: {drawing['name']} ({drawing['id'][:12]}...)")
+                print(f"  Drawing (fuzzy match): {drawing['name']} ({drawing['id'][:12]}...)")
         if drawing:
             drawing_eid = drawing["id"]
             print("  Exporting PDF...")

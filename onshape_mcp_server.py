@@ -935,6 +935,90 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["document_id"]
             }
+        ),
+        # ========== IMPORT TOOLS ==========
+        Tool(
+            name="onshape_import_file",
+            description="Import a local CAD file (STEP, IGES, Parasolid, SOLIDWORKS, etc.) into an Onshape document. The file is uploaded and automatically translated into native Onshape parts/assemblies. Useful for importing PCBs exported from Altium as STEP files.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "document_id": {
+                        "type": "string",
+                        "description": "Target Onshape document ID"
+                    },
+                    "workspace_id": {
+                        "type": "string",
+                        "description": "Target workspace ID"
+                    },
+                    "file_path": {
+                        "type": "string",
+                        "description": "Absolute local file path to the CAD file to import"
+                    },
+                    "format_name": {
+                        "type": "string",
+                        "description": "CAD format name (default: STEP). Common values: STEP, IGES, SOLIDWORKS, PARASOLID, ACIS, STL",
+                        "default": "STEP"
+                    },
+                    "flatten_assemblies": {
+                        "type": "boolean",
+                        "description": "Flatten assembly structure into a single Part Studio (default: false)",
+                        "default": False
+                    },
+                    "y_axis_is_up": {
+                        "type": "boolean",
+                        "description": "Set true if the source format uses Y as the up axis (default: false)",
+                        "default": False
+                    }
+                },
+                "required": ["document_id", "workspace_id", "file_path"]
+            }
+        ),
+        Tool(
+            name="onshape_import_file_and_wait",
+            description="Import a local CAD file into Onshape and wait for the translation to complete. Returns the final translation result including created element IDs. Use this when you need to confirm the import succeeded before proceeding.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "document_id": {
+                        "type": "string",
+                        "description": "Target Onshape document ID"
+                    },
+                    "workspace_id": {
+                        "type": "string",
+                        "description": "Target workspace ID"
+                    },
+                    "file_path": {
+                        "type": "string",
+                        "description": "Absolute local file path to the CAD file to import"
+                    },
+                    "format_name": {
+                        "type": "string",
+                        "description": "CAD format name (default: STEP)",
+                        "default": "STEP"
+                    },
+                    "flatten_assemblies": {
+                        "type": "boolean",
+                        "description": "Flatten assembly structure (default: false)",
+                        "default": False
+                    },
+                    "y_axis_is_up": {
+                        "type": "boolean",
+                        "description": "Y axis is up (default: false)",
+                        "default": False
+                    }
+                },
+                "required": ["document_id", "workspace_id", "file_path"]
+            }
+        ),
+        Tool(
+            name="onshape_list_translation_formats",
+            description="List all supported CAD file formats for import/export translation in Onshape.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
         )
     ]
 
@@ -996,53 +1080,16 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return [TextContent(type="text", text=result_text)]
         
         elif name == "onshape_set_variable":
-            # First, get ALL existing variables (API replaces all, not just one!)
-            existing = client.get_variables(
-                arguments["document_id"],
-                arguments["workspace_id"],
-                arguments["element_id"]
-            )
-            
-            # Handle response format (list with variableStudioReference wrapper)
-            if isinstance(existing, list) and len(existing) > 0:
-                all_vars = existing[0].get("variables", [])
-            else:
-                all_vars = existing.get("variables", [])
-            
-            # Update the specific variable
-            var_name = arguments["variable_name"]
-            found = False
-            updated_vars = []
-            for var in all_vars:
-                if var["name"] == var_name:
-                    updated_vars.append({
-                        "name": var_name,
-                        "type": var.get("type", "LENGTH"),
-                        "expression": arguments["expression"],
-                        "description": var.get("description", "")
-                    })
-                    found = True
-                else:
-                    updated_vars.append({
-                        "name": var["name"],
-                        "type": var.get("type", "LENGTH"),
-                        "expression": var["expression"],
-                        "description": var.get("description", "")
-                    })
-            
-            if not found:
-                return [TextContent(type="text", text=f"⚠ Variable '{var_name}' not found. Available: {[v['name'] for v in all_vars]}")]
-            
-            # Now update all variables
-            result = client.set_variables(
+            result = client.update_variable(
                 arguments["document_id"],
                 arguments["workspace_id"],
                 arguments["element_id"],
-                updated_vars
+                arguments["variable_name"],
+                arguments["expression"],
             )
             return [TextContent(
                 type="text",
-                text=f"✓ Variable '{var_name}' set to '{arguments['expression']}'"
+                text=f"✓ Variable '{arguments['variable_name']}' set to '{arguments['expression']}'"
             )]
         
         elif name == "onshape_set_multiple_variables":
@@ -1809,6 +1856,76 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 result_text += f"  {v['name']}{desc}\n"
                 result_text += f"    ID: {v['id']}\n"
                 result_text += f"    Created: {v.get('createdAt', 'unknown')}\n"
+            return [TextContent(type="text", text=result_text)]
+
+        # ========== IMPORT TOOL HANDLERS ==========
+        elif name == "onshape_import_file":
+            did = arguments["document_id"]
+            wid = arguments["workspace_id"]
+            file_path = arguments["file_path"]
+            format_name = arguments.get("format_name", "STEP")
+            flatten = arguments.get("flatten_assemblies", False)
+            y_up = arguments.get("y_axis_is_up", False)
+            result = client.upload_and_translate(
+                did, wid, file_path,
+                format_name=format_name,
+                flatten_assemblies=flatten,
+                y_axis_is_up=y_up,
+            )
+            tid = result.get("translationId", result.get("id", "unknown"))
+            state = result.get("requestState", "UNKNOWN")
+            result_text = (
+                f"File uploaded and translation started.\n"
+                f"  Translation ID: {tid}\n"
+                f"  State: {state}\n"
+                f"  File: {file_path}\n"
+                f"  Format: {format_name}\n"
+            )
+            return [TextContent(type="text", text=result_text)]
+
+        elif name == "onshape_import_file_and_wait":
+            did = arguments["document_id"]
+            wid = arguments["workspace_id"]
+            file_path = arguments["file_path"]
+            format_name = arguments.get("format_name", "STEP")
+            flatten = arguments.get("flatten_assemblies", False)
+            y_up = arguments.get("y_axis_is_up", False)
+            upload_result = client.upload_and_translate(
+                did, wid, file_path,
+                format_name=format_name,
+                flatten_assemblies=flatten,
+                y_axis_is_up=y_up,
+            )
+            tid = upload_result.get("translationId", upload_result.get("id", ""))
+            if tid:
+                final = client.poll_translation(tid)
+                state = final.get("requestState", "UNKNOWN")
+                result_elements = final.get("resultElementIds", [])
+                result_text = (
+                    f"File import completed.\n"
+                    f"  State: {state}\n"
+                    f"  Translation ID: {tid}\n"
+                    f"  File: {file_path}\n"
+                )
+                if result_elements:
+                    result_text += f"  Created elements: {', '.join(result_elements)}\n"
+            else:
+                result_text = (
+                    f"File uploaded but no translation ID returned.\n"
+                    f"  Response: {json.dumps(upload_result, indent=2)}\n"
+                )
+            return [TextContent(type="text", text=result_text)]
+
+        elif name == "onshape_list_translation_formats":
+            formats = client.get_translation_formats()
+            result_text = "Supported translation formats:\n"
+            for fmt in formats:
+                name_str = fmt.get("name", "?")
+                translatable = fmt.get("couldBeAssembly", False)
+                result_text += f"  {name_str}"
+                if translatable:
+                    result_text += " (can be assembly)"
+                result_text += "\n"
             return [TextContent(type="text", text=result_text)]
 
         else:

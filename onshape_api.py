@@ -165,6 +165,24 @@ class OnshapeClient:
         resp.raise_for_status()
         return {"status": "success", "updated": len(variables)}
 
+    def update_variable(self, document_id: str, workspace_id: str,
+                        element_id: str, name: str, expression: str) -> dict:
+        """Safely update a single variable without touching others.
+
+        Reads the full variable list, patches the target variable, then writes
+        all variables back. Raises ValueError if the variable name is not found.
+        """
+        raw = self.get_variables(document_id, workspace_id, element_id)
+        variables = raw[0]["variables"]
+        for v in variables:
+            if v["name"] == name:
+                v["expression"] = expression
+                return self.set_variables(document_id, workspace_id, element_id, variables)
+        raise ValueError(
+            f"Variable '{name}' not found in element {element_id}. "
+            f"Available: {[v['name'] for v in variables]}"
+        )
+
     # ── Parts ─────────────────────────────────────────────────────────────
 
     def get_parts(self, document_id: str, workspace_id: str,
@@ -981,3 +999,63 @@ class OnshapeClient:
             f"/metadata/d/{document_id}/w/{workspace_id}/e/{element_id}/p/{part_id}",
             json=body,
         )
+
+    # ── File Import (upload & translate) ─────────────────────────────────
+
+    def upload_and_translate(self, document_id: str, workspace_id: str,
+                             file_path: str, format_name: str = "STEP",
+                             flatten_assemblies: bool = False,
+                             y_axis_is_up: bool = False,
+                             allow_faulty_parts: bool = True,
+                             import_appearances: bool = True,
+                             import_within_document: bool = True,
+                             ) -> dict:
+        """Upload a CAD file to Onshape and translate it into parts/assemblies.
+
+        Uses the BlobElements endpoint with translate=true so the uploaded file
+        is automatically converted to native Onshape geometry.
+
+        Args:
+            document_id: Target document ID
+            workspace_id: Target workspace ID
+            file_path: Local path to the CAD file (STEP, IGES, Parasolid, etc.)
+            format_name: CAD format name (STEP, IGES, SOLIDWORKS, etc.)
+            flatten_assemblies: If True, flatten assembly structure
+            y_axis_is_up: Set True for formats where Y is the up axis
+            allow_faulty_parts: If True, import parts even with geometry errors
+            import_appearances: If True, import colours/appearances
+            import_within_document: If True, create parts in this document
+
+        Returns:
+            Translation response dict with translationId and requestState
+        """
+        from pathlib import Path
+        file_path = Path(file_path)
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        url = (f"{self.base_url}/api/v10"
+               f"/blobelements/d/{document_id}/w/{workspace_id}")
+
+        with open(file_path, "rb") as f:
+            files = {"file": (file_path.name, f)}
+            data = {
+                "formatName": format_name,
+                "translate": "true",
+                "storeInDocument": str(import_within_document).lower(),
+                "flattenAssemblies": str(flatten_assemblies).lower(),
+                "yAxisIsUp": str(y_axis_is_up).lower(),
+                "allowFaultyParts": str(allow_faulty_parts).lower(),
+                "importAppearances": str(import_appearances).lower(),
+            }
+            resp = requests.post(
+                url, auth=self.auth,
+                headers={"Accept": "application/json;charset=UTF-8;qs=0.09"},
+                files=files, data=data, timeout=120,
+            )
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_translation_formats(self) -> list:
+        """Get all supported translation (import/export) formats."""
+        return self._request("GET", "/translations/translationformats")
