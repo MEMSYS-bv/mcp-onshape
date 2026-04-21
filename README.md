@@ -8,18 +8,22 @@ An MCP (Model Context Protocol) server that integrates Onshape with GitHub Copil
 
 ```
 mcp-onshape/
-├── cli.py                  # Unified CLI entry point (bom, export, vars, meta, check, docs, create, cylinder)
+├── cli.py                  # Unified CLI entry point (bom, export, vars, meta, check, check-compliance, docs, create, cylinder)
 ├── constants.py            # Shared constants (header IDs, template refs, etc.)
 ├── document_registry.py    # YAML registry lookup + URL parsing
 ├── onshape_api.py          # Shared OnshapeClient class
 ├── onshape_documents.yaml  # Document registry (project code → doc IDs)
-├── onshape_mcp_server.py   # MCP server (32 tools for Copilot)
+├── onshape_mcp_server.py   # MCP server (35 tools for Copilot)
+├── revision.py             # Canonical revision model (Rev0.1, RevA, RevA.1, RevB)
+├── compliance_checker.py   # Design guide compliance checker
 ├── extract_bom.py          # CLI: BOM extraction
 ├── export_parts.py         # CLI: STEP + PDF export
 ├── sync_variables.py       # CLI: Variable Studio ↔ CSV sync
-├── set_part_metadata.py    # CLI: Part number / name / description
+├── set_part_metadata.py    # CLI: Part metadata (number, name, description, revision)
+├── create_version.py       # CLI: Version creation with guided naming
 ├── test_connection.py      # CLI: API connectivity test
-├── test_api.py              # Comprehensive test suite (15 tests)
+├── test_api.py             # Comprehensive test suite (15 tests)
+├── test_revision.py        # Revision model tests
 ├── pyproject.toml           # Package definition
 ├── .env                     # API keys (git-ignored)
 ├── .env.example             # Template for .env
@@ -35,6 +39,7 @@ mcp-onshape/
 | `constants.py` | BOM header IDs, metadata property IDs, MEMSYS template refs, material library ref, variable type maps |
 | `document_registry.py` | `load_documents()`, `get_document_ids()`, `get_drawing_map()`, `list_documents()`, `parse_onshape_url()` — all from `onshape_documents.yaml` |
 | `onshape_api.py` | `OnshapeClient` class — auth, requests, document/parts/variables/BOM/drawing/translation/feature/search API methods |
+| `revision.py` | Canonical revision model — `is_valid_revision()`, `normalize_revision()`, `suggest_next_revision()`, `format_for_filename()`, `parse_revision()` |
 
 All CLI scripts and the MCP server import from these modules. No duplicate API client or registry code.
 
@@ -124,15 +129,40 @@ python sync_variables.py EH-0080-BB2 --push vars.csv        # push CSV to OnShap
 python sync_variables.py EH-0080-BB2 --push vars.csv --dry-run
 ```
 
-### `set_part_metadata.py` — Part Number / Name / Description
+### `set_part_metadata.py` — Part Metadata (Number, Name, Description, Revision)
 
 ```bash
-python set_part_metadata.py EH-0080-BB2 --list              # list parts
+python set_part_metadata.py EH-0080-BB2 --list              # list parts with readiness
+python set_part_metadata.py EH-0080-BB2 --validate          # check export readiness
 python set_part_metadata.py EH-0080-BB2 \
-    --set Baseplate part_number=EH-0081-P-0001 description="Machined part"
+    --set Baseplate part_number=EH-0081-P-0001 revision=RevA description="Machined part"
 python set_part_metadata.py EH-0080-BB2 --parts updates.json
 python set_part_metadata.py EH-0080-BB2 --dry-run --set ...
 ```
+
+Revision values are validated against the canonical format. Loose values like `A` are auto-normalized to `RevA`.
+
+### `create_version.py` — Version Creation (Guided Naming)
+
+```bash
+python create_version.py EH-0080-BB1 "Rev0.1 - Initial"    # explicit name
+python create_version.py EH-0080-BB1 --working              # auto: next working snapshot
+python create_version.py EH-0080-BB1 --release              # auto: next formal release
+python create_version.py EH-0080-BB1 --suggest              # show suggestions only
+python create_version.py EH-0080-BB1 --list                 # list existing versions
+```
+
+Guided modes (`--working`, `--release`) scan existing versions and suggest the next valid revision name automatically.
+
+### `compliance_checker.py` — Design Guide Compliance
+
+```bash
+python compliance_checker.py EH-0080-BB1                    # human-readable report
+python compliance_checker.py EH-0080-BB1 --json             # JSON output
+python cli.py check-compliance EH-0080-BB1                  # via unified CLI
+```
+
+Checks: metadata completeness, revision format validity, drawing naming conventions, default part names, registry completeness. Exits non-zero on errors.
 
 ### `test_connection.py` — API Connectivity Test
 
@@ -263,7 +293,7 @@ Once configured, you can ask Copilot things like:
 
 ## API Reference
 
-### Tools (32 total)
+### Tools (35 total)
 
 #### Document Management
 
@@ -332,6 +362,15 @@ Once configured, you can ask Copilot things like:
 | `onshape_export_step` | Export a part as STEP file (async translation + download) |
 | `onshape_export_drawing_pdf` | Export a drawing as PDF file (async translation + download) |
 
+#### Version & Compliance
+
+| Tool | Description |
+|------|-------------|
+| `onshape_create_version` | Create a named version with optional guided mode (working/release) |
+| `onshape_suggest_version` | Suggest next version names based on existing revisions |
+| `onshape_list_versions` | List all named versions of a document |
+| `onshape_check_compliance` | Run design guide compliance check (metadata, revision, drawings) |
+
 ### Understanding Onshape URLs
 
 ```
@@ -343,6 +382,29 @@ https://cad.onshape.com/documents/{did}/w/{wid}/e/{eid}
 - **Document ID (did)**: Unique ID for the document
 - **Workspace ID (wid)**: The workspace/branch you're working in
 - **Element ID (eid)**: The specific tab (Variable Studio, Part Studio, etc.)
+
+## Revision Model
+
+All tools use a canonical revision format aligned with the MEMSYS Design Guide:
+
+| Label | Meaning | Example |
+|-------|---------|---------|
+| `Rev0.1`, `Rev0.2` | Pre-release working snapshots | Before first formal release |
+| `RevA` | First formal release | Manufacturing-ready |
+| `RevA.1`, `RevA.2` | Post-release working modifications | After RevA, before RevB |
+| `RevB` | Second formal release | Next manufacturing release |
+
+**Rules:**
+- Revision labels always include the `Rev` prefix in storage and display
+- Export filenames use `_Rev{X}-` format (e.g. `P-0001_RevA-Baseplate.step`)
+- Loose inputs like `A` or `0.1` are auto-normalized to `RevA` or `Rev0.1`
+- Invalid revisions block export and return a clear error with suggestion
+- The `revision.py` module provides all parsing, validation, and suggestion logic
+
+**Drawing Naming:**
+- Primary match: `{PartNumber} Drawing` (exact tab name)
+- Override: `drawing_map` in `onshape_documents.yaml`
+- Fallback: fuzzy name match (legacy documents only)
 
 ## Troubleshooting
 
