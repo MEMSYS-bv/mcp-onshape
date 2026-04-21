@@ -23,6 +23,7 @@ from pathlib import Path
 from onshape_api import OnshapeClient
 from document_registry import get_document_ids, list_documents, parse_onshape_url, get_drawing_map
 from constants import METADATA_PROPERTY_IDS
+from revision import normalize_revision, format_for_filename
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
@@ -31,7 +32,7 @@ ONSHAPE_SECRET_KEY = os.getenv("ONSHAPE_SECRET_KEY", "")
 
 
 def extract_revision(metadata: dict) -> str:
-    """Extract revision from part metadata."""
+    """Extract and normalize revision from part metadata."""
     props = metadata.get("properties", [])
     for p in props:
         pid = p.get("propertyId", "")
@@ -39,7 +40,8 @@ def extract_revision(metadata: dict) -> str:
         if "revision" in name or pid == METADATA_PROPERTY_IDS.get("revision", ""):
             val = p.get("value", "")
             if val:
-                return str(val)
+                normalized = normalize_revision(str(val))
+                return normalized if normalized else str(val)
     return "-"
 
 
@@ -64,10 +66,15 @@ def export_drawing_pdf(client: OnshapeClient, did: str, wid: str,
 
 
 def make_filename(part_number: str, revision: str, name: str, extension: str) -> str:
-    """Apply naming convention: ${partNumber}_Rev${revision}-${name}.ext"""
+    """Apply naming convention: ${partNumber}_Rev${revision}-${name}.ext
+
+    Uses format_for_filename() to strip the Rev prefix from canonical
+    revision labels, preventing double-prefix like _RevRevA-.
+    """
     # Sanitize name for filesystem
     safe_name = re.sub(r'[<>:"/\\|?*]', '_', name)
-    return f"{part_number}_Rev{revision}-{safe_name}.{extension}"
+    rev_part = format_for_filename(revision)
+    return f"{part_number}_Rev{rev_part}-{safe_name}.{extension}"
 
 
 # --- Main export logic ---

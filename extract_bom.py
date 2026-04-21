@@ -32,6 +32,7 @@ from pathlib import Path
 from onshape_api import OnshapeClient
 from document_registry import load_documents, get_document_ids, list_documents, parse_onshape_url
 from constants import BOM_HEADERS as HEADER_IDS
+from revision import normalize_revision
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
@@ -43,6 +44,14 @@ ONSHAPE_SECRET_KEY = os.getenv("ONSHAPE_SECRET_KEY", "")
 
 # Standard columns (always extracted)
 STANDARD_FIELDS = ["item", "name", "part_number", "description", "quantity", "material", "revision", "mass"]
+
+
+def _normalize_bom_revision(raw_value) -> str:
+    """Normalize a BOM revision value, falling back to the raw value if not parseable."""
+    if not raw_value:
+        return ""
+    raw_str = str(raw_value)
+    return normalize_revision(raw_str) or raw_str
 
 
 def extract_bom(client: OnshapeClient, doc_id: str, ws_id: str, elem_id: str,
@@ -87,7 +96,7 @@ def extract_bom(client: OnshapeClient, doc_id: str, ws_id: str, elem_id: str,
             "description": hv.get(HEADER_IDS.get("description", ""), "") or "",
             "quantity": qty,
             "material": material,
-            "revision": hv.get(HEADER_IDS.get("revision", ""), "") or "",
+            "revision": _normalize_bom_revision(hv.get(HEADER_IDS.get("revision", ""), "")),
             "mass": hv.get(HEADER_IDS.get("mass", ""), "N/A"),
         }
 
