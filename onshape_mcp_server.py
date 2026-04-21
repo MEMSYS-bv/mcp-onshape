@@ -902,7 +902,7 @@ async def list_tools() -> list[Tool]:
         # ========== VERSION TOOLS ==========
         Tool(
             name="onshape_create_version",
-            description="Create a named version (immutable snapshot) of an Onshape document. Versions freeze all Part Studios, Assemblies, and other elements at their current state.",
+            description="Create a named version (immutable snapshot) of an Onshape document. Supports guided naming via the 'mode' parameter: 'working' auto-generates the next intermediate revision (e.g. Rev0.1→Rev0.2), 'release' auto-generates the next formal release (e.g. Rev0.x→RevA). If mode is omitted, version_name is used as-is.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -912,14 +912,33 @@ async def list_tools() -> list[Tool]:
                     },
                     "version_name": {
                         "type": "string",
-                        "description": "Name for the new version (e.g., 'V1', 'V2 - Updated geometry')"
+                        "description": "Name for the new version. Required if mode is not specified. Examples: 'Rev0.1', 'RevA', 'RevA.1'"
                     },
                     "description": {
                         "type": "string",
                         "description": "Optional description for the version"
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["working", "release"],
+                        "description": "Guided mode: 'working' for next intermediate snapshot, 'release' for next formal release. Auto-generates version_name."
                     }
                 },
-                "required": ["document_id", "version_name"]
+                "required": ["document_id"]
+            }
+        ),
+        Tool(
+            name="onshape_suggest_version",
+            description="Suggest the next version name based on existing document versions. Shows both the next working snapshot and next formal release name without creating anything.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "document_id": {
+                        "type": "string",
+                        "description": "The Onshape document ID"
+                    }
+                },
+                "required": ["document_id"]
             }
         ),
         Tool(
@@ -1855,17 +1874,49 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
         # ========== VERSION TOOL HANDLERS ==========
         elif name == "onshape_create_version":
+            from create_version import suggest_version_name
             did = arguments["document_id"]
-            version_name = arguments["version_name"]
+            mode = arguments.get("mode")
             description = arguments.get("description", "")
+
+            if mode:
+                suggested, current = suggest_version_name(client, did, mode)
+                version_name = suggested
+                if not description:
+                    description = (
+                        f"{'Release' if mode == 'release' else 'Working snapshot'}"
+                        f"{' (from ' + current + ')' if current else ''}"
+                    )
+            else:
+                version_name = arguments.get("version_name")
+                if not version_name:
+                    return [TextContent(type="text",
+                        text="Error: either 'version_name' or 'mode' is required.")]
+
             result = client.create_version(did, version_name, description)
             result_text = (
                 f"Version created successfully!\n"
                 f"  Name: {result['name']}\n"
                 f"  ID: {result['id']}\n"
             )
+            if mode:
+                result_text += f"  Mode: {mode}\n"
             if result.get("description"):
                 result_text += f"  Description: {result['description']}\n"
+            return [TextContent(type="text", text=result_text)]
+
+        elif name == "onshape_suggest_version":
+            from create_version import suggest_version_name
+            did = arguments["document_id"]
+            working_name, current = suggest_version_name(client, did, "working")
+            release_name, _ = suggest_version_name(client, did, "release")
+            result_text = ""
+            if current:
+                result_text += f"Latest revision: {current}\n"
+            else:
+                result_text += "No existing revisions found.\n"
+            result_text += f"\nSuggested next working snapshot: {working_name}\n"
+            result_text += f"Suggested next formal release:  {release_name}\n"
             return [TextContent(type="text", text=result_text)]
 
         elif name == "onshape_list_versions":
