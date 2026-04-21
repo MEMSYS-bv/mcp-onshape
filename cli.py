@@ -10,6 +10,7 @@ Usage:
   python cli.py vars EH-0080-BB1 --push vars.csv
   python cli.py meta EH-0080-BB1 --list              # Part metadata
   python cli.py check                                 # Connection test
+  python cli.py check-compliance EH-0080-BB1          # Design guide compliance
   python cli.py docs                                  # List registered docs
   python cli.py create "My Document"                  # Create new document
   python cli.py cylinder --did X --wid Y --eid Z --diameter 30 --height 100
@@ -62,9 +63,13 @@ def main():
     elif command == "cylinder":
         _cmd_cylinder()
 
+    elif command == "check-compliance":
+        from compliance_checker import main as compliance_main
+        compliance_main()
+
     else:
         print(f"Unknown command: {command}")
-        print("Available commands: bom, export, vars, meta, check, docs, server, create, cylinder")
+        print("Available commands: bom, export, vars, meta, check, check-compliance, docs, server, create, cylinder")
         sys.exit(1)
 
 

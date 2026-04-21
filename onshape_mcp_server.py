@@ -1019,7 +1019,30 @@ async def list_tools() -> list[Tool]:
                 "properties": {},
                 "required": []
             }
-        )
+        ),
+        # ========== COMPLIANCE TOOLS ==========
+        Tool(
+            name="onshape_check_compliance",
+            description="Run a design guide compliance check on an Onshape document. Checks part metadata completeness (part number, revision, material), revision format validity, drawing naming conventions, and default part names. Returns errors (blocking) and warnings (informational). Use before export to catch issues early.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "document_id": {
+                        "type": "string",
+                        "description": "The Onshape document ID"
+                    },
+                    "workspace_id": {
+                        "type": "string",
+                        "description": "The workspace ID"
+                    },
+                    "project_code": {
+                        "type": "string",
+                        "description": "Optional project code from the document registry (for registry checks)"
+                    }
+                },
+                "required": ["document_id", "workspace_id"]
+            }
+        ),
     ]
 
 
@@ -1926,6 +1949,25 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 if translatable:
                     result_text += " (can be assembly)"
                 result_text += "\n"
+            return [TextContent(type="text", text=result_text)]
+
+        elif name == "onshape_check_compliance":
+            from compliance_checker import run_compliance_check
+            did = arguments["document_id"]
+            wid = arguments["workspace_id"]
+            project_code = arguments.get("project_code")
+            findings = run_compliance_check(client, did, wid, project_code)
+            errors = [f for f in findings if f["level"] == "error"]
+            warnings = [f for f in findings if f["level"] == "warning"]
+            compliant = len(errors) == 0
+            result_text = f"Compliance check: {'PASS' if compliant else 'FAIL'}\n"
+            result_text += f"  Errors: {len(errors)}, Warnings: {len(warnings)}\n\n"
+            for f in errors:
+                label = f["part_number"] if f["part_number"] != "-" else f["part_name"]
+                result_text += f"  ✗ [{f['check']}] {label}: {f['message']}\n"
+            for f in warnings:
+                label = f["part_number"] if f["part_number"] != "-" else f["part_name"]
+                result_text += f"  ⚠ [{f['check']}] {label}: {f['message']}\n"
             return [TextContent(type="text", text=result_text)]
 
         else:
